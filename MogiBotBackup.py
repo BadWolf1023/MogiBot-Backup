@@ -47,18 +47,6 @@ tier_instances = {}
 client = discord.Client()
 
 
-def create_mmr_string(players:List[Tuple[int, str, discord.Member]]):
-    mmr_str = "**Player List**"
-    for index, player in enumerate(players, 1):
-        mmr_str += "\n`" + str(index) + ".` "
-        mmr_str += player[2].display_name + " (MMR: "
-        if player[0] == -1:
-            mmr_str += "NAN - Name doesn't match Lounge name"
-        else:
-            mmr_str += str(player[0])
-        mmr_str += ")"
-    return mmr_str
-
 @client.event
 async def on_message(message: discord.Message):
     

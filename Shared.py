@@ -122,14 +122,12 @@ allowed_bagger_tiers = {1:(IRON_BAGGER, BRONZE_BAGGER),
 
 backup_folder = "backups/"
 player_fc_pickle_path = "player_fcs.pkl"
-restricted_filter_data_pickle_path = "restricted_data.pkl"
-backup_file_list = [player_fc_pickle_path, restricted_filter_data_pickle_path]
+backup_file_list = [player_fc_pickle_path]
 add_fc_commands = {"setfc"}
 get_fc_commands = {"fc"}
 #Need here to avoid circular import...
 ml_terms = {"ml","mogilist", "wl", "warlist"}
 mllu_terms = {"mllu","mogilistlineup","wllu","warlistlineup"}
-go_live_terms = {"golive"}
 update_role_terms = {"ur", "updaterole"}
 set_host_terms = {"sethost", "sh"}
 get_host_terms = {"host"}
@@ -571,8 +569,6 @@ def is_get_fc_check(message:str, prefix=prefix):
     return is_in(message, get_fc_commands, prefix)
 def is_update_role(message:str, prefix=prefix):
     return is_in(message, update_role_terms, prefix)
-def is_go_live(message:str, prefix=prefix):
-    return is_in(message, go_live_terms, prefix)
  
 async def send_add_fc(message:discord.Message, valid_terms=add_fc_commands, prefix=prefix):
     str_msg = message.content
@@ -638,12 +634,6 @@ async def process_other_command(message:discord.Message, prefix=prefix):
             results = await process_changes(to_be_changed, message.guild.emojis)
             if len(results) != 0:
                 await message.channel.send(results)
-    elif is_go_live(message.content, prefix=prefix):
-        if is_boss(message.author) or is_developer(message.author):
-            global war_lounge_live
-            war_lounge_live = not war_lounge_live
-            await message.channel.send("War Lounge live: " + str(war_lounge_live))
-        
     else:
         return False
     return True
