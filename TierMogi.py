@@ -131,6 +131,21 @@ class TierMogi(object):
     
     def getPicklableTierMogi(self):
         temp = [p.getPickablePlayer() for p in self.mogi_list]
+        
+        temp2 = None
+        if self.vote_author_mapping != None:
+            temp2 = {}
+            for author_hashed, member in self.vote_author_mapping.items():
+                temp2[author_hashed] = member.id
+                
+        temp3 = None
+        if self.teams != None:
+            temp3 = []
+            for team in self.teams:
+                temp3.append([])
+                for player in team:
+                    temp3[-1].append(player.getPickablePlayer())
+                    
         return TierMogiPicklable.TierMogiPicklable(temp,
                                                    self.channel.id,
                                                    self.last_list_time,
@@ -140,12 +155,28 @@ class TierMogi(object):
                                                    self.last_ping_time,
                                                    self.bagger_count,
                                                    self.runner_count,
-                                                   self.host)
+                                                   
+                                                   self.host,
+                                                   self.last_mmrlu_time,
+                                                   self.votes,
+                                                   temp2,
+                                                   self.last_votes_send,
+                                                   self.mogi_format,
+                                                   temp3,
+                                                   self.last_team_time,
+                                                   self.host_string
+                                                   )
         
     def reconstruct(self, mogi_list:List[Player.Player],
                     channel:discord.channel.TextChannel,
+                    teams:List[List],
+                    vote_author_mapping,
                     picklableTierMogi:TierMogiPicklable.TierMogiPicklable):
+        
         self.mogi_list = mogi_list
+        self.teams = teams
+        self.vote_author_mapping = vote_author_mapping
+        
         self.channel = channel
         self.last_list_time = picklableTierMogi.last_list_time
         self.last_ml_time = picklableTierMogi.last_ml_time
@@ -155,14 +186,24 @@ class TierMogi(object):
         self.bagger_count = picklableTierMogi.bagger_count
         self.runner_count = picklableTierMogi.runner_count
         self.host = picklableTierMogi.host
-        self.last_mmrlu_time = None
+        
+        if 'host' in picklableTierMogi.__dict__:
+            self.host = picklableTierMogi.host            
+        if 'last_mmrlu_time' in picklableTierMogi.__dict__:
+            self.last_mmrlu_time = picklableTierMogi.last_mmrlu_time
+        if 'votes' in picklableTierMogi.__dict__:
+            self.votes = picklableTierMogi.votes
+        if 'last_votes_send' in picklableTierMogi.__dict__:
+            self.last_votes_send = picklableTierMogi.last_votes_send
+        if 'mogi_format' in picklableTierMogi.__dict__:
+            self.mogi_format = picklableTierMogi.mogi_format
+        if 'last_team_time' in picklableTierMogi.__dict__:
+            self.last_team_time = picklableTierMogi.last_team_time
+        if 'host_string' in picklableTierMogi.__dict__:
+            self.host_string = picklableTierMogi.host_string
         
     def is_voting(self):
         if self.start_time == None:
-            return False
-        
-        time_passed = datetime.now() - self.start_time
-        if time_passed >= WAY_OVERTIME:
             return False
         #It has started... has the format been decided?
         return self.mogi_format == None
@@ -232,7 +273,7 @@ class TierMogi(object):
         if self.is_voting():
             time_passed = datetime.now() - self.start_time
             if time_passed >= FORCE_PICK_OVERTIME:
-                self.mogi_format = "I'm thinking..." #Silly, but necessary to stop further votes from coming in - might give a laugh if !votes is run in the nanoseconds of processing that __choose_format__ is run
+                self.mogi_format = "UNKNOWN" #Silly, but necessary to stop further votes from coming in - might give a laugh if !votes is run in the nanoseconds of processing that __choose_format__ is run
                 self.mogi_format = self.__choose_format__()
                 self.randomize_teams(valid_votes[self.mogi_format])
                 await self.send_votes(wait_time_str="")
@@ -719,7 +760,7 @@ class TierMogi(object):
         msg_str += "\n"
         
         for mogi in mogis:
-            msg_str += "\n" + mogi.channel.mention + " - " + str(len(mogi.mogi_list)) + "/12"
+            msg_str += "\n" + mogi.channel.mention + " - " + str(len(mogi.mogi_list)) + "/" + str(DEFAULT_MOGI_SIZE)
             if mogi.mogi_format != None:
                 to_add = "FFA"
                 if mogi.mogi_format != "1":

@@ -152,7 +152,7 @@ bagger_leaderboard_name = "Bagger Leaderboard"
 runner_mmr_range = "'" + runner_leaderboard_name + "'!C2:D"
 bagger_mmr_range = "'" + bagger_leaderboard_name + "'!C2:D"
 
-can_update_role = {UPDATER_ID, DEVELOPER_ID, LOWER_TIER_ARBITRATOR_ID, HIGHER_TIER_ARBITRATOR_ID, BOSS_ID}
+can_update_role = {UPDATER_ID, DEVELOPER_ID, LOWER_TIER_ARBITRATOR_ID, HIGHER_TIER_ARBITRATOR_ID, CT_ARBITRATOR_ID, BOSS_ID}
 player_fcs = None
 medium_delete = 7
 
@@ -219,6 +219,10 @@ def strip_prefix_and_command(message:str, valid_terms:set, prefix:str=prefix):
 
 def is_boss(member:discord.Member):
     return has_any_role_ids(member, {BOSS_ID})
+
+def is_arb_plus(member:discord.Member):
+    return has_any_role_ids(member, {DEVELOPER_ID, LOWER_TIER_ARBITRATOR_ID, HIGHER_TIER_ARBITRATOR_ID, CT_ARBITRATOR_ID, BOSS_ID})
+
 def is_developer(member:discord.Member):
     return has_any_role_ids(member, {DEVELOPER_ID})
 

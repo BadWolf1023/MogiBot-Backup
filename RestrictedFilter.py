@@ -126,7 +126,7 @@ async def settings_menu(message:discord.Message):
             await message.channel.send("Set war restricted role id to: " + id_to_set)
 
 async def restricted_filter(message:discord.Message):
-    if Shared.is_boss(message.author) or Shared.is_developer(message.author):
+    if Shared.is_arb_plus(message.author):
         if Shared.is_in(message.content, restriction_boss_commands, Shared.prefix):
             await settings_menu(message)
             return True
@@ -238,8 +238,7 @@ def load_default_data_settings():
     
 def load_whitelisted_terms_pickle(backup_path=Shared.restricted_filter_data_pickle_path):
     global dict_data
-    load_default_data_settings()
-    
+    dict_data = {}
     if os.path.exists(backup_path):
         with open(backup_path, "rb") as pickle_in:
             try:
@@ -247,6 +246,10 @@ def load_whitelisted_terms_pickle(backup_path=Shared.restricted_filter_data_pick
             except:
                 print("Could not read in pickle for restriction filter.")
                 raise
+    if dict_data == None or len(dict_data) == 0:
+        load_default_data_settings()
+        print("Loaded default settings for restriction filtering.")
+        
             
 def settings_pickle_dump():
     with open(Shared.restricted_filter_data_pickle_path, "wb") as pickle_out:

@@ -18,26 +18,39 @@ import sys
 import atexit
 import signal
 import MMR
+import Leaderboard
 
 import ChannelTeamManager
 import MMRPull
 import RestrictedFilter
+
+
+testing_server = False
 bot_key = None
 testing_bot_key = None
 pickle_dump_path = "tiers_pickle.pkl"
 private_info_file = "private.txt"
 
 pug_lounge_server_id = 387347467332485122
-ECHELON_CATEGORY = 751956338912788559
-BOT_TESTING_CATEGORY = 755258711605510185
-MODERATION_CATEGORY = 751956338116001843
-allowed_mogi_categories = [ECHELON_CATEGORY, BOT_TESTING_CATEGORY, MODERATION_CATEGORY]
+
+RT_ECHELON_CATEGORY = 389250562836922378
+CT_ECHELON_CATEGORY = 520790337443332104
+RT_32_TRACK_CATEGORY = 695649588857798686
+SUPPORT_CATEGORY = 572901669638242308
+MODERATION_CATEGORY = 430167221600518174
+UNRANKED_CATEGORY = 650189437434593299
+allowed_mogi_categories = [RT_ECHELON_CATEGORY, CT_ECHELON_CATEGORY, RT_32_TRACK_CATEGORY, SUPPORT_CATEGORY, MODERATION_CATEGORY, UNRANKED_CATEGORY]
 #mogi_bot_id = 450127943012712448
 DEBUGGING = False
+
+if testing_server == True:
+    pug_lounge_server_id = 739733336871665696
+    allowed_mogi_categories = [740574341187633232]
 
 tier_mogi_instances = None
 mmr_channel_instances = {}
 tier_instances = {}
+leaderboard_instances = {}
 client = discord.Client()
 
 
@@ -84,11 +97,6 @@ async def unlock_captains(channel:discord.channel.TextChannel):
     await channel.set_permissions(channel.guild.default_role, read_messages=False, send_messages=None)
     await delete_captain_role(channel) 
     
-"""def new_mogi(message:discord.Message):
-    return message.author.id == mogi_bot_id and "has started a mogi" in message.content
-def mogi_started(message:discord.Message):
-    return message.author.id == mogi_bot_id and "Type `!list` to get a list of the players (once every 30 seconds)" in message.content
-"""
 
 def create_channel_team_manager(channel:discord.channel.TextChannel, capA:discord.Member, capB:discord.Member):
     return ChannelTeamManager.ChannelTeamManager(channel, capA, capB)
@@ -107,6 +115,7 @@ def create_mmr_string(players:List[Tuple[int, str, discord.Member]]):
 
 @client.event
 async def on_message(message: discord.Message):
+    
     #mkwxSoup, roomID, rLID = await roomExistsLoop(roomID)
     ##########################################################################################At this point, we know the room exists, and we certainly have rLID. We're not sure if we have the roomID yet though.    
     #ignore everything outside of 5v5 Lounge
@@ -115,7 +124,11 @@ async def on_message(message: discord.Message):
     #ignore your own messages
     if message.author == client.user:
         return
+    if message.author.bot:
+        return
     if message.guild.id != pug_lounge_server_id:
+        return
+    if tier_mogi_instances == None:
         return
     
     
@@ -126,20 +139,24 @@ async def on_message(message: discord.Message):
         
     if channel_id not in mmr_channel_instances:
         mmr_channel_instances[channel_id] = MMR.MMR()
+    
+    if channel_id not in leaderboard_instances:
+        leaderboard_instances[channel_id] = Leaderboard.Leaderboard()
         
     tier_mogi = tier_mogi_instances[channel_id]
     channel_mmr = mmr_channel_instances[channel_id]
+    leaderboard_instance = leaderboard_instances[channel_id]
         
     
     
     #The following snippets of code make the bot more efficient - unfortunately at the cost of making the code less readable
     #TODO: Come back here
-    if True or message.channel.category_id in allowed_mogi_categories:
+    if message.channel.category_id in allowed_mogi_categories:
         await tier_mogi_instances[channel_id].__update__(message)
         
     #Bosses can turn restricted filtering off
     #TODO: Come back here
-    if False and await RestrictedFilter.restricted_filter(message):
+    if await RestrictedFilter.restricted_filter(message):
         return
     
     message_str = message.content.strip()
@@ -163,8 +180,7 @@ async def on_message(message: discord.Message):
     #Their command starts with !
     #TODO: Come back here
     
-    if True or message.channel.category_id in allowed_mogi_categories or\
-    Shared.is_ml(message.content) or Shared.is_mllu(message.content):
+    if message.channel.category_id in allowed_mogi_categories:
         if Shared.is_in(message.content, TierMogi.teams_terms, Shared.prefix):
             return
         elif Shared.is_in(message.content, TierMogi.teams_terms, Shared.alternate_prefix):
@@ -173,6 +189,10 @@ async def on_message(message: discord.Message):
             was_mogi_command = await tier_mogi.sent_message(message, tier_mogi_instances, Shared.prefix)
             if was_mogi_command:
                 return
+            
+        was_leaderboard_command = await leaderboard_instance.process_leaderboard_command(message)
+        if was_leaderboard_command:
+            return
         
         
     return #don't check any further - we don't want mmr in Lounge, nor other commands
@@ -187,95 +207,12 @@ async def on_message(message: discord.Message):
         return
     
     
-    #if mogi bot is saying something, it might be useful
-    """if message.author.id == mogi_bot_id:
-        if mogi_started(message):
-            await message.channel.send("Chat is locked down while captains pick teams.")
-            await message.channel.set_permissions(message.channel.guild.default_role, read_messages=False, send_messages=False)
-            captain_role = await create_captain_role(message.channel)
-            if captain_role != None:
-                captains, _, allPlayers = await get_captains(message)
-                captains_member_list = [c[2] for c in captains]
-                
-                if len(captains) != 2:
-                    await message.channel.send("Did not have 2 captains. Unlocking chat. Pick teams manually.")
-                    await unlock_captains(message.channel)
-                    return
-                await assign_captains_roles(message, captains_member_list, captain_role)
-                
-                tier_instances[message.channel.id] = create_channel_team_manager(message.channel, captains_member_list[0], captains_member_list[1])
-                mmr_str = create_mmr_string(allPlayers)
-                await message.channel.send(captains_member_list[0].mention + " and " + captains_member_list[1].mention + \
-                                           ", you have 3 minutes to pick teams.\nTo select someone to be on your team, use the prefix " + prefix + " and then their name." + \
-                                           " Only pick one person at a time.\nExample: " + prefix + "Rob\n\nIf you need to repick teams, do: `" + prefix + "repick`" +\
-                                           "\n\n" + mmr_str)
-
-        elif new_mogi(message):
-            time.sleep(.5)
-            try:
-                await message.channel.fetch_message(message.id)
-                last_sent = message.channel.last_message
-                #To avoid the mogi bot bug where it double sends on !esn, we'll check if the last message sent was our own reset
-                if last_sent != None and last_sent.author == client.user and "New mogi started. Teams have been reset." in last_sent.content:
-                    pass
-                else:
-                    await message.channel.send("New mogi started. Teams have been reset.")
-                    if message.channel.id in tier_instances:
-                        del tier_instances[message.channel.id]
-                    await unlock_captains(message.channel)
-            except discord.errors.NotFound:
-                pass
-                
-            
-    else:
-        channel_id = message.channel.id
-        if message.content.startswith(prefix):
-            new_message = strip_prefix(message.content, prefix).strip()
-            
-            if channel_id in tier_instances and tier_instances[channel_id].is_locked:
-                ctm = tier_instances[channel_id]
-                if ctm.isCaptain(message.author):
-                    if new_message.strip().lower() in ['restart', 'repick']:
-                        ctm.repick()
-                        await message.channel.send("Done. Pick the teams again.\n" + ctm.getTeamsString())
-                    elif new_message.strip().lower() in ['esn']:
-                        pass
-                    else:
-                        ctm.pick(message.author, discord.utils.escape_markdown(discord.utils.escape_mentions(new_message)))
-                        if ctm.teams_are_picked():
-                            ctm.unlock()
-                            await unlock_captains(ctm.channel)
-                            await message.channel.send("The teams have been chosen. The chat is now unlocked.\n\n" + ctm.getTeamsString())
-                        else:
-                            await message.channel.send(ctm.getTeamsString())
-                
-            if new_message.lower() in ['teams', 'team']:
-                if channel_id in tier_instances:
-                    ctm = tier_instances[channel_id]
-                    team_str = ctm.getTeamsString()
-                    delete_me = await message.channel.send(team_str)
-                    await delete_me.delete(delay=20)
-                else:
-                    delete_me = await message.channel.send("No mogi going on currently.")
-                    await delete_me.delete(delay=5)
-        
-                    
-    """                
-                    
-                
-        
-"""@tasks.loop(seconds=30)
-async def unlockCheck():
-    for ctm in tier_instances.values():
-        if ctm.should_be_unlocked():
-            ctm.unlock()
-            await unlock_captains(ctm.channel)
-            await ctm.channel.send("The captains took too long to pick the teams. Channel unlocked. Pick teams manually.")
-"""     
+    
 @tasks.loop(seconds=45)
 async def routine_tier_checks():
-    for tier_mogi in tier_mogi_instances.values():
+    for _, tier_mogi in tier_mogi_instances.items():
         await tier_mogi.drop_warn_check()
+
         
 @tasks.loop(seconds=60)
 async def routine_unmute_checks():
@@ -293,7 +230,10 @@ async def backup_data():
     Shared.player_fc_pickle_dump()
     RestrictedFilter.settings_pickle_dump()
     Shared.backup_files(Shared.backup_file_list)
-        
+
+@tasks.loop(hours=3)
+async def leaderboard_pull():
+    await Leaderboard.pull_data()
        
        
 def get_channel(channels, channel_id):
@@ -312,6 +252,7 @@ def private_data_init():
         Shared.google_api_key = f.readline().strip("\n")
         Shared.google_sheet_gid_url = Shared.google_sheets_url_base + Shared.google_sheet_id + "/values:batchGet?" + "key=" + Shared.google_api_key
 
+
 @client.event
 async def on_ready():
     """global user_flag_exceptions
@@ -323,7 +264,7 @@ async def on_ready():
         #TODO: COme back here
         if os.path.exists(pickle_dump_path):
             guild = client.get_guild(pug_lounge_server_id)
-            members = guild.members
+            members = await guild.fetch_members(limit=None).flatten()
             channels = guild.text_channels
             picklable_dict = {}
             with open(pickle_dump_path, "rb") as pickle_in:
@@ -332,7 +273,6 @@ async def on_ready():
                 except:
                     print("Could not read tier instances in.")
                     picklable_dict = {}
-                    raise
                 
             new_tier_instances = {}
             for channel_id, picklable_tier_mogi in picklable_dict.items():
@@ -350,8 +290,31 @@ async def on_ready():
                     else:
                         curPlayer.reconstruct(picklable_player, curMember)
                         mogi_list.append(curPlayer)
+                teams = None
+                if picklable_tier_mogi.teams != None:
+                    teams = []
+                    for team in picklable_tier_mogi.teams:
+                        teams.append([])
+                        for picklable_player in team:
+                            curPlayer = Player.Player(None, None)
+                            curMember = get_member(members, picklable_player.member_id)
+                            if curMember == None:
+                                player_error = True
+                            else:
+                                curPlayer.reconstruct(picklable_player, curMember)
+                                teams[-1].append(curPlayer)
+                
+                
+                author_mapping = None
+                if picklable_tier_mogi.author_mapping != None:
+                    author_mapping = {}
+                    for hashed, author_id in picklable_tier_mogi.author_mapping.items():
+                        curMember = get_member(members, author_id)
+                        if curMember != None:
+                            author_mapping[hashed] = curMember
+                            
                 curTier = TierMogi.TierMogi(None)
-                curTier.reconstruct(mogi_list, cur_channel, picklable_tier_mogi)
+                curTier.reconstruct(mogi_list, cur_channel, teams, author_mapping, picklable_tier_mogi)
                 if player_error:
                     curTier.recalculate()
                 new_tier_instances[channel_id] = curTier
@@ -367,6 +330,7 @@ async def on_ready():
     routine_unmute_checks.start()
     backup_data.start()
     routine_force_vote_checks.start()
+    leaderboard_pull.start()
     print("Finished on ready.")
     
 
@@ -400,4 +364,7 @@ signal.signal(signal.SIGINT, handler)
 atexit.register(on_exit)
 
 private_data_init()
-client.run(bot_key)
+if testing_server == True:
+    client.run(testing_bot_key)
+else:
+    client.run(bot_key)
