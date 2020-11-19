@@ -5,7 +5,6 @@ Created on Sep 14, 2020
 '''
 
 import discord
-from discord.utils import get
 from typing import List, Tuple
 from discord.ext import tasks
 
@@ -18,11 +17,6 @@ import sys
 import atexit
 import signal
 import MMR
-import Leaderboard
-
-import ChannelTeamManager
-import MMRPull
-import RestrictedFilter
 
 
 testing_server = False
@@ -50,56 +44,8 @@ if testing_server == True:
 tier_mogi_instances = None
 mmr_channel_instances = {}
 tier_instances = {}
-leaderboard_instances = {}
 client = discord.Client()
 
-
-
-
-async def create_captain_role(channel:discord.channel.TextChannel):
-    try:
-        channel_captain_role = await channel.guild.create_role(name=channel.name + "-captain")
-        await channel.set_permissions(channel_captain_role, send_messages=True)
-        return channel_captain_role
-    except discord.Forbidden:
-        await channel.send("Could not create captain role. Missing permissions.")
-    
-
-async def delete_captain_role(channel:discord.channel.TextChannel):
-    role = discord.utils.get(channel.guild.roles, name=channel.name + "-captain")
-
-    while role:
-        try:
-            await role.delete()
-        except discord.Forbidden:
-            await channel.send("Could not remove captain role. Missing permissions.")
-            break
-        except discord.errors.NotFound:
-            break
-            pass
-        role = discord.utils.get(channel.guild.roles, name=channel.name + "-captain")
-
-async def get_channels_captain_role(channel:discord.channel.TextChannel):
-    return get(channel.guild.roles, name=channel.name + "-captain")
-
-async def get_captains(message:discord.Message):
-    return await MMRPull.getCaptains(message.mentions)
-    
-async def assign_captains_roles(message:discord.Message, captains:List[discord.Member], captain_role:discord.Role):
-    try:
-        for captain in captains:
-            await captain.add_roles(captain_role)
-    except discord.Forbidden:
-        await message.channel.send("Could not assign captains their roles. Missing permissions.")
-
-
-async def unlock_captains(channel:discord.channel.TextChannel):
-    await channel.set_permissions(channel.guild.default_role, read_messages=False, send_messages=None)
-    await delete_captain_role(channel) 
-    
-
-def create_channel_team_manager(channel:discord.channel.TextChannel, capA:discord.Member, capB:discord.Member):
-    return ChannelTeamManager.ChannelTeamManager(channel, capA, capB)
 
 def create_mmr_string(players:List[Tuple[int, str, discord.Member]]):
     mmr_str = "**Player List**"
@@ -140,13 +86,8 @@ async def on_message(message: discord.Message):
     if channel_id not in mmr_channel_instances:
         mmr_channel_instances[channel_id] = MMR.MMR()
     
-    if channel_id not in leaderboard_instances:
-        leaderboard_instances[channel_id] = Leaderboard.Leaderboard()
-        
     tier_mogi = tier_mogi_instances[channel_id]
     channel_mmr = mmr_channel_instances[channel_id]
-    leaderboard_instance = leaderboard_instances[channel_id]
-        
     
     
     #The following snippets of code make the bot more efficient - unfortunately at the cost of making the code less readable
@@ -154,10 +95,6 @@ async def on_message(message: discord.Message):
     if message.channel.category_id in allowed_mogi_categories:
         await tier_mogi_instances[channel_id].__update__(message)
         
-    #Bosses can turn restricted filtering off
-    #TODO: Come back here
-    if await RestrictedFilter.restricted_filter(message):
-        return
     
     message_str = message.content.strip()
     if message_str == "" or message_str[0] not in Shared.all_prefixes:
@@ -189,10 +126,6 @@ async def on_message(message: discord.Message):
             was_mogi_command = await tier_mogi.sent_message(message, tier_mogi_instances, Shared.prefix)
             if was_mogi_command:
                 return
-            
-        was_leaderboard_command = await leaderboard_instance.process_leaderboard_command(message)
-        if was_leaderboard_command:
-            return
         
         
     return #don't check any further - we don't want mmr in Lounge, nor other commands
@@ -215,10 +148,6 @@ async def routine_tier_checks():
 
         
 @tasks.loop(seconds=60)
-async def routine_unmute_checks():
-    await RestrictedFilter.check_muted(client.get_guild(pug_lounge_server_id))
-
-@tasks.loop(seconds=60)
 async def routine_force_vote_checks():
     if tier_mogi_instances != None:
         for mogi in tier_mogi_instances.values():
@@ -228,12 +157,7 @@ async def routine_force_vote_checks():
 @tasks.loop(hours=24)
 async def backup_data():
     Shared.player_fc_pickle_dump()
-    RestrictedFilter.settings_pickle_dump()
     Shared.backup_files(Shared.backup_file_list)
-
-@tasks.loop(hours=3)
-async def leaderboard_pull():
-    await Leaderboard.pull_data()
        
        
 def get_channel(channels, channel_id):
@@ -323,14 +247,10 @@ async def on_ready():
             
     if Shared.player_fcs == None: 
         Shared.load_player_fc_pickle()
-    if RestrictedFilter.dict_data == None:
-        RestrictedFilter.load_whitelisted_terms_pickle()
         
     routine_tier_checks.start()
-    routine_unmute_checks.start()
     backup_data.start()
     routine_force_vote_checks.start()
-    leaderboard_pull.start()
     print("Finished on ready.")
     
 
@@ -349,11 +269,9 @@ def on_exit():
         except:
             print("Could not dump pickle for tier instances.")
             Shared.player_fc_pickle_dump()
-            RestrictedFilter.settings_pickle_dump()
             raise
         
     Shared.player_fc_pickle_dump()
-    RestrictedFilter.settings_pickle_dump()
     
 
 def handler(signum, frame):

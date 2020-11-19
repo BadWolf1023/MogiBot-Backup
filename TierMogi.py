@@ -1321,7 +1321,6 @@ class TierMogi(object):
             await self.send_host(message)
             
         elif self.is_mmrlu(message_str, prefix):
-            return
             if self._can_mmrlu():
                 await self.send_mmrlu(message, prefix)
                 
